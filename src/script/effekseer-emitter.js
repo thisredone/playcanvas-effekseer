@@ -17,21 +17,37 @@ EffekseerEmitter.attributes.add("scale",  {
 });
 
 
-EffekseerEmitter.prototype.initialize = function() {
+// My Uranus patch
+EffekseerEmitter.attributes.add("inEditor",  {
+    type: 'boolean',
+    default: true,
+});
 
-    // TODO : it is better to wait or find effekseer system
-    window.createPlayCanvasEffekseerSystem(this.app);
-    
+EffekseerEmitter.prototype.editorInitialize = function() {
+    if (this._editorInitializeCalled) return;
+    this._editorInitializeCalled = true;
+    let i;
+    i = setInterval(() => {
+        if (window.effekseerActive) {
+            clearInterval(i);
+            this.initialize()
+        }
+    }, 100)
+}
+// End patch
+
+EffekseerEmitter.prototype.initialize = function() {
+    if (!window.effekseerActive) return this.editorInitialize();
     if(this.effect)
     {
         theApp = this.app;
         var redirectFuc = function redirect(src) {
             var srcs = src.split('/');
             var filename = srcs[srcs.length-1];
-            var assets = theApp.assets.findAll(filename); 
-            
+            var assets = theApp.assets.findAll(filename);
+
             if(assets.length === 0) return src;
-            
+
             for(var i = 0; i < assets.length; i += 1)
             {
                 var url = assets[i].getFileUrl();
@@ -41,15 +57,15 @@ EffekseerEmitter.prototype.initialize = function() {
         };
 
 
-        console.log(this.effect);
-        console.log(this.effect.getFileUrl());
+        // console.log(this.effect);
+        // console.log(this.effect.getFileUrl());
         var context = window.playCanvasEffekseerSystem.context;
-        
+
         context.addEvent((c) => {
             this.effekseer_effect = c.context.loadEffect(this.effect.getFileUrl(), this.scale, () => {}, () => {}, redirectFuc);
         });
     }
-    
+
     // TODO : it is better to wait or find effekseer system
     this.on("destroy", function () {
         if(this.effekseer_effect.isLoaded) {
@@ -57,46 +73,49 @@ EffekseerEmitter.prototype.initialize = function() {
             var handle = context.context.releaseEffect(this.effekseer_effect);
             this.effekseer_effect = null;
         }
-        window.deletePlayCanvasEffekseerSystem();
+        // window.deletePlayCanvasEffekseerSystem();
     });
-    
+
     this._handles = [];
     this._commands = [];
-    
+
     if(this.playOnEnter) {
         this.play();
     }
+    this._ready = true;
 };
 
 EffekseerEmitter.prototype.update = function(dt) {
-    
+    if (!this._ready) return;
     // execute commands
     if(this.effekseer_effect && this.effekseer_effect.isLoaded)
     {
         this._commands.forEach(function (v) { v(); });
         this._commands = [];
     }
-    
+
     // remove finished handles
     this._handles = this._handles.filter(function(item) {
         return item.exists;
     });
-    
+
     // update transforms
     for(var i = 0; i < this._handles.length; i++)
     {
         var transform = this.entity.getWorldTransform();
-        this._handles[i].setMatrix(Array.prototype.slice.call(transform.data));
+        // this._handles[i].setMatrix(Array.prototype.slice.call(transform.data));
+        this._handles[i].setMatrix(transform.data);
     }
 };
 
 EffekseerEmitter.prototype.play = function() {
 
-    var f = function () { 
+    var f = function () {
         var context = window.playCanvasEffekseerSystem.context;
         var handle = context.context.play(this.effekseer_effect, 0, 0, 0);
         var transform = this.entity.getWorldTransform();
-        handle.setMatrix(Array.prototype.slice.call(transform.data));
+        // handle.setMatrix(Array.prototype.slice.call(transform.data));
+        handle.setMatrix(transform.data);
         this._handles.push(handle);
     }.bind(this);
     

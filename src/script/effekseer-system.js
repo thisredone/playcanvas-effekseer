@@ -1,4 +1,5 @@
 /*jshint esversion: 6, asi: true, laxbreak: true*/
+window._initEffekseerSystem = function(doneCallback) {
 
 if(pc.Application.getApplication() === undefined)
 {
@@ -11,24 +12,39 @@ else
 
 effekseerWasmLoadingEvents = []
 effekseerWasmLoaded = false;
+// console.log('effekseerWasmAssets', effekseerWasmAssets);
 
 if(effekseerWasmAssets.length > 0)
 {
     effekseer.setImageCrossOrigin("anonymous");
 
+    if (pc.WasmModule.getConfig('effekseer_native')) {
+        // console.log("effekseer_native config:", pc.WasmModule.getConfig('effekseer_native'));
+    } else {
+        const wasmConfig = {
+            glueUrl: pc.Application.getApplication().assets.get(effekseerWasmAssets[0]._data.glueScriptId).getFileUrl(),
+            wasmUrl: effekseerWasmAssets[0].getFileUrl(),
+            fallbackUrl: ''
+        };
+        // console.log("effekseer_native config:", wasmConfig);
+        pc.WasmModule.setConfig('effekseer_native', wasmConfig);
+    }
+
     pc.WasmModule.getInstance("effekseer_native", (instance) => {
         window["effekseer_native"] = instance;
+
+        effekseer.initRuntime(effekseerWasmAssets[0].getFileUrl(), () => {
+            var gl = pc.Application.getApplication().graphicsDevice.gl;
+
+            effekseerWasmLoaded = true;
+            for(var i = 0; i < effekseerWasmLoadingEvents.length; i++)
+            {
+                effekseerWasmLoadingEvents[i]();
+            }
+            doneCallback()
+        });
     });
     
-    effekseer.initRuntime(effekseerWasmAssets[0].getFileUrl(), () => {
-        var gl = pc.Application.getApplication().graphicsDevice.gl;
-        
-        effekseerWasmLoaded = true;
-        for(var i = 0; i < effekseerWasmLoadingEvents.length; i++)
-        {
-            effekseerWasmLoadingEvents[i]();        
-        }
-    });
 }
 
 function addEffekseerWasmLoadingEvent(f)
@@ -112,6 +128,8 @@ window.deletePlayCanvasEffekseerSystem = function() {
     }
 };
 
+};
+
 
 var EffekseerSystem = pc.createScript('effekseerSystem');
 
@@ -119,8 +137,36 @@ EffekseerSystem.attributes.add("Camera",  {
     type: 'entity'
 });
 
+// My Uranus patch
+EffekseerSystem.attributes.add("inEditor",  {
+    type: 'boolean',
+    default: true,
+});
+
+EffekseerSystem.prototype.editorInitialize = function() {
+    if (this._editorInitializeCalled) return;
+    this._editorInitializeCalled = true;
+    let i;
+    i = setInterval(() => {
+        if (window.effekseer) {
+            window._initEffekseerSystem(() => {
+                window.effekseerActive = true;
+                this.initialize()
+            })
+            clearInterval(i);
+        }
+    }, 100)
+    if (window.Uranus?.Editor) {
+        this.Camera = editor.call('camera:current');
+        setInterval(() => {
+            this.Camera = editor.call('camera:current');
+        }, 100)
+    }
+}
+// End patch
+
 EffekseerSystem.prototype.initialize = function() {
-    
+    if (!window.effekseerActive) return this.editorInitialize();
     window.createPlayCanvasEffekseerSystem(this.app);
     
     var theObj = this;
@@ -155,6 +201,7 @@ EffekseerSystem.prototype.initialize = function() {
 };
 
 EffekseerSystem.prototype.update = function(dt) {
+    if (!window.effekseerActive) return;
     var context = window.playCanvasEffekseerSystem.context;
     if(context.loaded)
     {
